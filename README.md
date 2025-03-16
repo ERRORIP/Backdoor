@@ -7,7 +7,7 @@ This project is intended for educational and research purposes only. Use it on s
 
 ### Overview
 
-This project is a stealthy PHP file manager and backdoor that provides covert system access and file management functionality through a simple web interface. It allows you to browse directories, upload, edit, download, rename, move, compress, and delete files. In addition, it features a built-in terminal emulator and a host information page. A unique lock mechanism is also provided to restrict access.
+This project is a stealthy PHP file manager and backdoor that provides covert system access and file management functionality through a simple web interface. It allows you to browse directories, upload, edit, download, rename, move, compress, delete files, and even send files directly to Telegram. In addition, it features a built-in terminal emulator and a host information page. A unique lock mechanism is also provided to restrict access.
 
 ---
 ![Screenshot of File Manager](11.jpg)
@@ -21,18 +21,19 @@ This project is a stealthy PHP file manager and backdoor that provides covert sy
   - **View / Edit:** Open files directly in the browser using [CodeMirror](https://codemirror.net) for syntax highlighting.  
   - **Download:** Forces file downloads (even HTML files) by reading files in binary mode with proper HTTP headers.  
   - **Rename, Move & Delete:** Easily perform file operations through a contextual dropdown (three-dot menu) for each file.  
-  - **Compress:** Create ZIP archives of files or directories for easy transfer and backup.
+  - **Compress:** Create ZIP archives of files or directories for easy transfer and backup.  
+  - **Send to Telegram:** Files can be sent directly to Telegram via a built-in integration using the Telegram API.
 
 - **Upload Functionality**  
   - Supports file uploads with the ability to choose a target directory.  
   - Offers a text input to specify a custom target directory if needed.
 
 - **Terminal Emulator**  
-  - **Xterm.js Integration:** A built-in web terminal that lets you execute basic commands on the server with live output.  
+  - **Xterm.js Integration:** A built-in web terminal that lets you execute basic commands on the server with live output.
 
 - **Host Information**  
   - Displays comprehensive server details including OS, PHP version, server IP, disk space, and more in a clean, tabular layout.
-![Screenshot of File Manager](12.jpg)
+
 - **Lock Mechanism**  
   - Toggle a built-in lock feature to restrict access via a password prompt.  
   - Lock state and password are stored in the browser’s localStorage (for demonstration purposes only).
@@ -43,7 +44,7 @@ This project is a stealthy PHP file manager and backdoor that provides covert sy
   - Can be used as a backdoor for covert access in testing environments (Note: Unauthorized use is illegal).
 
 ---
-
+![Screenshot of File Manager](12.jpg)
 ### Technical Details & Analysis
 
 #### How It Works:
@@ -61,6 +62,9 @@ This project is a stealthy PHP file manager and backdoor that provides covert sy
   
 - **Lock Mechanism:**  
   Implements a simple lock feature via JavaScript using modal dialogs and stores the password in localStorage (not secure for production).
+  
+- **Telegram Integration:**  
+  Built-in functionality sends selected files directly to Telegram using a provided bot token and chat ID.
 
 #### Backdoor Analysis:
 - **Broad Access:**  
@@ -86,7 +90,7 @@ This project is a stealthy PHP file manager and backdoor that provides covert sy
    Toggle the lock feature by clicking the "Lock Off" button and set a password to restrict access.
    
 4. **File Operations:**  
-   Use the dropdown menu (three dots) next to each file or folder to view, edit, rename, move, compress, or delete files.
+   Use the dropdown menu (three dots) next to each file or folder to view, edit, rename, move, compress, delete files, or send them to Telegram.
    
 5. **Terminal & Upload:**  
    Execute simple commands via the integrated terminal or upload files as needed.

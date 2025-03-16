@@ -10,7 +10,7 @@ This project is intended for educational and research purposes only. Use it on s
 This project is a stealthy PHP file manager and backdoor that provides covert system access and file management functionality through a simple web interface. It is designed to work on a web server and allows a user to perform various file operations like browsing directories, uploading, editing, downloading, renaming, moving, compressing, and deleting files. In addition, it features a built-in terminal emulator and a host information page. A unique lock mechanism is also provided to restrict access.
 
 ---
-![Screenshot of File Manager](11.png)
+![Screenshot of File Manager](11.jpg)
 
 ## Key Features
 
@@ -27,7 +27,7 @@ This project is a stealthy PHP file manager and backdoor that provides covert sy
 - **Upload Functionality**  
   - Supports file uploads with a target directory selection.  
   - Provides a text input for specifying a custom target directory if not using the default directory.
-![Screenshot of File Manager](12.png)
+![Screenshot of File Manager](12.jpg)
 - **Terminal Emulator**  
   - Integrated Xterm.js terminal that lets you run basic commands on the server.
   - The terminal output is displayed directly on the web page.
@@ -42,7 +42,7 @@ This project is a stealthy PHP file manager and backdoor that provides covert sy
   - The lock state and password are stored in the browser’s localStorage (for session protection).
 
 ---
-![Screenshot of File Manager](13.png)
+![Screenshot of File Manager](13.jpg)
 ## Technical Details
 
 - **User Interface & Layout:**  

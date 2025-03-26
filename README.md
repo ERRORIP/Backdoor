@@ -10,7 +10,7 @@ This project is intended for educational and research purposes only. Use it on s
 This project is a stealthy PHP file manager and backdoor that provides covert system access and file management functionality through a simple web interface. It allows you to browse directories, upload, edit, download, rename, move, compress, delete files, and even send files directly to Telegram. In addition, it features a built-in terminal emulator and a host information page. A unique lock mechanism is also provided to restrict access.
 
 ---
-![Screenshot of File Manager](11.jpg)
+![Screenshot of File Manager](https://github.com/user-attachments/assets/11d95e5a-32d7-4124-a833-44fee27ab921)
 ### Key Features
 
 - **Directory Browsing & File Listing**  
@@ -44,7 +44,7 @@ This project is a stealthy PHP file manager and backdoor that provides covert sy
   - Can be used as a backdoor for covert access in testing environments (Note: Unauthorized use is illegal).
 
 ---
-![Screenshot of File Manager](12.jpg)
+![Screenshot of File Manager](https://github.com/user-attachments/assets/0f9f2b9f-07eb-4a1f-babf-b39a5f54d944)
 ### Technical Details & Analysis
 
 #### How It Works:
@@ -77,7 +77,7 @@ This project is a stealthy PHP file manager and backdoor that provides covert sy
   Due to its powerful capabilities, it must be used only in controlled, authorized environments. The localStorage lock is for demonstration and not a production-level security solution.
 
 ---
-![Screenshot of File Manager](13.jpg)
+![Screenshot of File Manager](https://github.com/user-attachments/assets/9be159b3-3728-4f37-a1f0-30ad3f227ef7)
 ### Usage & Deployment
 
 1. **Deploy:**  

